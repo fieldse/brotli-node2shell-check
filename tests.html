@@ -5,15 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Testing methodology</title>
 <meta name="description" content="How the CVE-2026-111497 automated checker is tested: 48 container tests mapped to its 18 numbered checks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <style>
 /* Layout: same advisory bulletin as index.html. Header band, then a reading column; the two tables run full width and scroll on their own. */
 :root {
-  --bg: #fbfbfa; --paper: #ffffff; --ink: #1a1d24; --muted: #5d6370; --rule: #d9dbe0;
-  --band: #1e2a44; --band-ink: #f2f4f8; --band-muted: #b7c0d4; --link: #1d4f91; --code-bg: #f1f2f4;
-  --bad: #a3271a; --good: #1f6b3a; --limit: #8a5a00; --stripe: #f6f7f8;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  color-scheme: light;
+  /* Blacklight Security: flat near-black ground, zinc cards with faint borders, one purple accent. */
+  --bg: #0b0b0d;
+  --paper: #111114;
+  --raised: #16161a;
+  --ink: #f2f2f3;
+  --body: #c9c9cf;
+  --muted: #a1a1aa;
+  --rule: #232328;
+  --band: #0b0b0d;
+  --band-ink: #fafafa;
+  --band-muted: #a1a1aa;
+  --link: #b388f9;
+  --code-bg: #18181c;
+  --primary: #a855f7;
+  --bad: #f87171;
+  --good: #4ade80;
+  --limit: #fb923c;
+  --stripe: #0e0e11;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
@@ -80,6 +98,105 @@ table.list { border-collapse: collapse; width: 100%; min-width: 860px; font-size
 .back:hover { color: var(--band-ink); text-decoration: underline; }
 [id] { scroll-margin-top: 16px; }
 footer { border-top: 1px solid var(--rule); padding-block: 20px 32px; font-size: 14px; color: var(--muted); }
+
+/* Blacklight treatment: centered hero, mono eyebrow pills, purple highlight word, rounded bordered cards. */
+body { color: var(--body); font-size: 18px; }
+table, table.list { font-size: 16px; }
+.cmd code, .code pre { font-size: 14.5px; }
+strong, b, td:first-child, dt, h1, h2, h3 { color: var(--ink); }
+.band { background: none; padding-block: 80px 24px; text-align: center; }
+.band .wrap { display: flex; flex-direction: column; align-items: center; }
+.band .ids { display: inline-block; margin: 0; padding: 4px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper);
+  font: 500 13px/1.5 var(--mono); color: var(--primary); letter-spacing: 0.01em; }
+.band .ids b, .band .ids a { color: var(--primary); font-weight: 500; }
+.band h1 { margin: 24px 0 18px; font-size: clamp(30px, calc((100vw - 48px) / 18), 60px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--band-ink); max-width: none; }
+.band .wrap { max-width: 1440px; }
+.band p:not(.ids) { color: var(--muted); font-size: 19px; line-height: 1.6; max-width: 58ch; margin: 0 auto; }
+.hl { color: var(--primary); }
+main { gap: 72px; padding-block: 48px 80px; }
+h2 { border-bottom: 0; padding-bottom: 0; font-size: clamp(26px, 3.4vw, 36px); font-weight: 800; letter-spacing: -0.025em; }
+h2[data-eyebrow]::before { content: attr(data-eyebrow); display: block; width: fit-content; margin-bottom: 16px; padding: 3px 12px;
+  border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); font: 500 13px/1.5 var(--mono); color: var(--primary); letter-spacing: 0.01em; }
+h3 { font-size: 20px; }
+.muted { color: var(--muted); }
+a { color: var(--link); text-decoration-color: rgba(179, 136, 249, .4); text-underline-offset: 3px; }
+a:hover { text-decoration-color: currentColor; }
+code { background: var(--code-bg); color: #e4e4e7; border: 1px solid var(--rule); border-radius: 5px; padding: 0 5px; }
+
+/* Introduction as one card, labels as spaced capitals */
+dl.intro { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 4px 28px; }
+dl.intro dt, dl.intro dd { border-color: var(--rule); padding-block: 20px; }
+dl.intro > :nth-last-child(-n+2) { border-bottom: 0; }
+dl.intro dt { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); padding-top: 24px; }
+dl.intro li::marker { color: var(--primary); }
+
+/* Tables in rounded cards */
+.table-scroll { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); }
+table, table.matrix, table.list { background: transparent; }
+thead th, .matrix thead th, .list thead th { background: var(--raised); color: var(--muted); letter-spacing: 0.08em; }
+th, td { border-color: var(--rule); }
+tbody tr:nth-child(even) { background: var(--stripe); }
+.cmd { background: var(--code-bg); border-color: var(--rule); border-radius: 8px; }
+.cmd .copy:hover { background: var(--raised); border-color: var(--rule); }
+td.bad { color: var(--bad); }
+td.good { color: var(--good); }
+
+/* Code blocks */
+.code { background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; }
+.code pre { color: #e4e4e7; }
+.code button { background: var(--raised); color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; }
+.code button:hover { border-color: var(--primary); box-shadow: 0 0 16px rgba(168, 85, 247, .3); }
+dl.levels dt { color: var(--limit); }
+dl.levels dt.fail { color: var(--bad); }
+
+ul.resources li { border-color: var(--rule); }
+ul.sources li::marker, ul.notes li::marker, ul.plain li::marker { color: var(--primary); }
+
+/* Tests page */
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; border: 0; padding: 0; }
+.facts div { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 26px 16px; text-align: center; justify-items: center; }
+.facts b { font-size: 42px; font-weight: 800; letter-spacing: -0.02em; color: var(--primary); }
+.facts div:nth-child(2) b { color: var(--good); }
+.facts div:nth-child(3) b { color: var(--limit); }
+.facts span { color: var(--muted); font-size: 15px; }
+@media (max-width: 640px) { .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+nav.toc { border: 1px solid var(--rule); border-radius: 12px; background: var(--paper); padding: 20px 28px; max-width: none; }
+nav.toc h2 { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); margin-bottom: 10px; }
+nav.toc ol { display: block; list-style: none; padding-left: 0; columns: 2; column-gap: 48px; counter-reset: toc; }
+nav.toc li { counter-increment: toc; display: flex; gap: 14px; padding: 5px 0; break-inside: avoid; }
+nav.toc li::before { content: counter(toc, decimal-leading-zero); font: 500 13px/1.75 var(--mono); color: var(--primary); }
+nav.toc li > a { color: var(--ink); font-weight: 600; text-decoration: none; }
+nav.toc li > a:hover { color: var(--primary); }
+nav.toc li span { display: none; }
+@media (max-width: 640px) { nav.toc ol { columns: 1; } }
+.band .back { margin-bottom: 20px; font: 500 13px var(--mono); color: var(--muted); }
+.band .back:hover { color: var(--primary); }
+.matrix tbody th { background: var(--paper); color: var(--ink); }
+.matrix tbody tr:nth-child(even) th, .matrix tbody tr:nth-child(even) td { background: var(--stripe); }
+.matrix thead th.grp { color: var(--primary); }
+.list tr.grp th { background: var(--raised); color: var(--primary); }
+.list td.tid { color: var(--ink); }
+.dot.limit { background: var(--limit); }
+
+.src { margin: 0; }
+.src a { display: inline-flex; align-items: center; gap: 8px; }
+.src a { padding: 6px 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--raised); color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none; }
+.src a:hover { border-color: var(--primary); box-shadow: 0 0 16px rgba(168, 85, 247, .3); }
+/* Blacklight call to action, after the mitigation section */
+.cta { border: 1px solid rgba(168, 85, 247, .35); border-radius: 12px; padding: 32px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, .2) 0%, rgba(168, 85, 247, .06) 60%, rgba(168, 85, 247, .02) 100%), var(--paper);
+  display: grid; gap: 14px; }
+.cta .label { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--primary); }
+.cta h3 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.cta p { margin: 0; max-width: 62ch; color: var(--body); }
+.cta .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 6px; }
+.cta .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 15px; text-decoration: none; }
+.cta .btn-primary { background: linear-gradient(135deg, #a855f7, #c96ef7); border: 1px solid #be5eed; color: #fff; box-shadow: 0 0 20px rgba(168, 85, 247, .3); }
+.cta .btn-primary:hover { box-shadow: 0 0 28px rgba(168, 85, 247, .5); }
+.cta .btn-ghost { border: 1px solid var(--rule); background: var(--raised); color: var(--ink); }
+.cta .btn-ghost:hover { border-color: var(--primary); }
+footer { border-color: var(--rule); color: var(--muted); }
+@media print { .band h1, h2, .hl { color: #000; } h2[data-eyebrow]::before { display: none; } }
 </style>
 </head>
 <body>
@@ -88,7 +205,7 @@ footer { border-top: 1px solid var(--rule); padding-block: 20px 32px; font-size:
   <div class="wrap">
     <a class="back" href="./">← Back to the guide</a>
     <p class="ids"><b>CVE-2026-111497</b> &nbsp;·&nbsp; <a href="./">Dev check</a> &nbsp;·&nbsp; Tests</p>
-    <h1>Testing methodology</h1>
+    <h1>Testing <span class='hl'>methodology</span></h1>
     <p>48 container tests check the script's verdicts against the fixed versions vendors and distros publish.</p>
   </div>
 </header>
