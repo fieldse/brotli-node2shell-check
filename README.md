@@ -10,6 +10,13 @@ This repository contains:
 
 Fixed versions come from the vendor advisories listed in the guide, checked on 2026-10-29.
 
+## Contents
+
+- [Quick start](#quick-start)
+- [Script checks](#script-checks)
+- [Manual testing](#manual-testing): [Debian 12](#debian-12), [Ubuntu 22.04](#ubuntu-2204), [Python](#python), [Node.js](#nodejs)
+- [FAQ](#faq)
+
 ## Quick start
 
 ```bash
