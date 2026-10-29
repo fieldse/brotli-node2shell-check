@@ -53,71 +53,52 @@ In `-c` / `-i` mode the script checks only an image's OS packages, the `node` an
 
 ## Manual testing
 
-Each example starts a throwaway container with a known-vulnerable build, mounts `scripts/` read-only, and runs the manual check and then the script. Run them from the repository root. `-r /root` searches the container's real home directory, so no test files are planted. Every vulnerable run prints a `FAIL` line and exits 1. After the upgrade or on the fixed version, it prints `PASS` and exits 0.
+Run the script against a known-vulnerable container, from the repository root:
+
+- Vulnerable build: `FAIL`, exit 1.
+- After the upgrade: `PASS`, exit 0.
+- `-r /root` scans the container's real home directory. Nothing is planted.
 
 ### Debian 12
 
 ```bash
-docker run --rm -it -v "$PWD/scripts":/scripts:ro debian:bookworm-slim bash
-```
-
-Inside the container:
-
-```bash
+docker run --rm -it -v "$PWD/scripts/vuln-check-CVE2026-111497-brotli.sh":/check.sh:ro debian:bookworm-slim bash
+# inside the container
 apt-get update && apt-get install -y libbrotli1=1.0.9-2+b6
-dpkg -l libbrotli1 | tail -1                                   # 1.0.9-2+b6
-bash /scripts/vuln-check-CVE2026-111497-brotli.sh -r /root    # FAIL [01] libbrotli1 ... listed as vulnerable
-
-apt-get install -y --only-upgrade libbrotli1                   # upgrade to 1.0.9-2+deb12u1
-bash /scripts/vuln-check-CVE2026-111497-brotli.sh -r /root    # PASS [01] libbrotli1 ... fixed in 1.0.9-2+deb12u1
+bash /check.sh -r /root                        # FAIL [01] libbrotli1
+apt-get install -y --only-upgrade libbrotli1   # 1.0.9-2+deb12u1
+bash /check.sh -r /root                        # PASS [01] libbrotli1
 ```
 
 ### Ubuntu 22.04
 
 ```bash
-docker run --rm -it -v "$PWD/scripts":/scripts:ro ubuntu:22.04 bash
-```
-
-Inside the container:
-
-```bash
+docker run --rm -it -v "$PWD/scripts/vuln-check-CVE2026-111497-brotli.sh":/check.sh:ro ubuntu:22.04 bash
+# inside the container
 apt-get update && apt-get install -y libbrotli1=1.0.9-2build6
-dpkg -l libbrotli1 | tail -1                                   # 1.0.9-2build6
-bash /scripts/vuln-check-CVE2026-111497-brotli.sh -r /root    # FAIL [01] libbrotli1 ... fixed in 1.0.9-2ubuntu0.1
-
-apt-get install -y --only-upgrade libbrotli1                   # upgrade to 1.0.9-2ubuntu0.1
-bash /scripts/vuln-check-CVE2026-111497-brotli.sh -r /root    # PASS [01] libbrotli1
+bash /check.sh -r /root                        # FAIL [01] libbrotli1
+apt-get install -y --only-upgrade libbrotli1   # 1.0.9-2ubuntu0.1
+bash /check.sh -r /root                        # PASS [01] libbrotli1
 ```
 
 ### Python
 
 ```bash
-docker run --rm -it -v "$PWD/scripts":/scripts:ro python:3.13-slim bash
-```
-
-Inside the container:
-
-```bash
+docker run --rm -it -v "$PWD/scripts/vuln-check-CVE2026-111497-brotli.sh":/check.sh:ro python:3.13-slim bash
+# inside the container
 pip install Brotli==1.2.0
-pip list 2>/dev/null | grep -i brotli                          # brotli 1.2.0
-bash /scripts/vuln-check-CVE2026-111497-brotli.sh -r /root    # FAIL [08] brotli ... found 1.2.0, fixed 1.2.1
-
-pip install Brotli==1.2.1                                      # fixed version
-bash /scripts/vuln-check-CVE2026-111497-brotli.sh -r /root    # PASS [08] brotli ... found 1.2.1
+bash /check.sh -r /root                        # FAIL [08] brotli
+pip install Brotli==1.2.1
+bash /check.sh -r /root                        # PASS [08] brotli
 ```
 
 ### Node.js
 
-The official image unpacks Node into `/usr/local`, so you upgrade it by changing the image tag.
+Node is fixed by moving to a newer image tag.
 
 ```bash
-docker run --rm -v "$PWD/scripts":/scripts:ro node:24.22.0-slim \
-  bash -c 'node --version; bash /scripts/vuln-check-CVE2026-111497-brotli.sh -r /root'
-# v24.22.0, then FAIL [02] node ... found 24.22.0, fixed 24.22.1
-
-docker run --rm -v "$PWD/scripts":/scripts:ro node:24.22.1-slim \
-  bash -c 'node --version; bash /scripts/vuln-check-CVE2026-111497-brotli.sh -r /root'
-# v24.22.1, then PASS [02] node ... bundles a decoder with the fix marker
+docker run --rm -v "$PWD/scripts/vuln-check-CVE2026-111497-brotli.sh":/check.sh:ro node:24.22.0-slim bash /check.sh -r /root   # FAIL [02] node
+docker run --rm -v "$PWD/scripts/vuln-check-CVE2026-111497-brotli.sh":/check.sh:ro node:24.22.1-slim bash /check.sh -r /root   # PASS [02] node
 ```
 
 ## FAQ
