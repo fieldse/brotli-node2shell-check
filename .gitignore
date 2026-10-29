@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# Windows and Linux
+Thumbs.db
+Desktop.ini
+.directory
+
+# Editors
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+.zed/
+
+# Git leftovers
+*.orig
+*.rej
+
+# Scratch
+*.tmp
+*.bak
+*.log
+.env
+.env.*
