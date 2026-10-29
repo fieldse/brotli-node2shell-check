@@ -2,7 +2,7 @@
 
 **Is your service exposed to HTTP2Shell?** It's a remote code execution bug in Google's Brotli decoder, under active attack. It affects Node.js, Bun, Python, .NET, Java, curl, Envoy and OS `libbrotli` packages.
 
-- **Check by hand:** [read the guide](https://fieldse.github.io/brotli-node2shell-check/) for the command and fixed version for each stack.
+- **Check by hand:** [read the guide](https://fieldse.github.io/brotli-node2shell-check/) for the command and fixed version for each stack. Every version it gives is sourced in the [version references](https://fieldse.github.io/brotli-node2shell-check/references.html).
 - **Check automatically:** run the read-only script in [Quick start](#quick-start).
 
 ## Contents

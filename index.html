@@ -267,6 +267,7 @@ footer { border-color: var(--rule); color: var(--muted); }
       <dt>What it is</dt>
       <dd><ul>
         <li>An out-of-bounds write in the decoder of Brotli, Google's compression library, versions 1.0.3 to 1.2.0 (CVE-2026-111497). Runtimes and packages use it to unpack Brotli-compressed HTTP data.</li>
+        <li>Fixed upstream in 1.0.10, 1.1.1 and 1.2.1, all released 2026-10-21.</li>
         <li>Every runtime, package or library that bundles or links that decoder inherits it.</li>
       </ul></dd>
       <dt>Impact</dt>
@@ -291,7 +292,7 @@ footer { border-color: var(--rule); color: var(--muted); }
       </ul></dd>
       <dt>Related</dt>
       <dd><ul>
-        <li>The pure-Go <code>andybalholm/brotli</code> has a separate, low-severity bug that only crashes. See the Go row.</li>
+        <li>The pure-Go <code>andybalholm/brotli</code> has the same flaw, but in Go it can only crash the process. Fixed in v1.2.7. See the Go row.</li>
       </ul></dd>
     </dl>
   </section>
@@ -309,36 +310,47 @@ footer { border-color: var(--rule); color: var(--muted); }
           <tr><td>Bun</td><td class="check"><div class="cmd"><code>bun --version</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
             <td class="bad"><ul><li>1.0.21 to below 1.4.4</li></ul></td>
             <td class="good"><ul><li>1.4.4</li><li>Rebuild <code>bun build --compile</code> binaries</li></ul></td></tr>
-          <tr><td>.NET</td><td class="check"><div class="cmd"><code>dotnet --list-runtimes</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
-            <td class="bad"><ul><li>8 below 8.0.33</li><li>9 below 9.0.22</li><li>10 below 10.0.14</li></ul></td>
-            <td class="good"><ul><li>8.0.33, 9.0.22 or 10.0.14</li><li>Rebuild self-contained and NativeAOT apps</li></ul></td></tr>
+          <tr><td>.NET</td><td class="check"><div class="cmd"><code>dotnet --list-runtimes</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div><span class="muted">compare runtime versions</span></td>
+            <td class="bad"><ul><li>8 below 8.0.33</li><li>9 below 9.0.22</li><li>10 below 10.0.14</li><li>11 previews and RCs before 11.0.0-rc.3.26522.148</li></ul></td>
+            <td class="good"><ul><li>8.0.33, 9.0.22 or 10.0.14</li><li>11.0.0-rc.3.26522.148</li><li>Rebuild self-contained and NativeAOT apps</li></ul></td></tr>
           <tr><td>Python</td><td class="check"><div class="cmd"><code>pip list 2&gt;/dev/null | grep -iE '^(brotli|brotlicffi|curl[-_]cffi) '</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div><span class="muted">in every venv</span></td>
             <td class="bad"><ul><li><code>Brotli</code> below 1.2.1</li><li><code>brotlicffi</code> below 1.2.1.0</li><li><code>curl_cffi</code> below 0.17.0</li></ul></td>
             <td class="good"><ul><li>1.2.1</li><li>1.2.1.0</li><li>0.17.0</li></ul></td></tr>
-          <tr><td>Java</td><td class="check"><div class="cmd"><code>mvn dependency:tree -Dincludes=com.aayushatharva.brotli4j</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div><div class="cmd"><code>./gradlew dependencies | grep brotli4j</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
-            <td class="bad"><ul><li><code>brotli4j</code> 1.23.0 or earlier</li></ul></td>
-            <td class="good"><ul><li>1.24.0</li></ul></td></tr>
-          <tr><td>Ruby</td><td class="check"><div class="cmd"><code>grep -E '^\s+brotli ' Gemfile.lock</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
-            <td class="bad"><ul><li><code>brotli</code> gem 0.9.0 or earlier</li></ul></td>
+          <tr><td>Java</td><td class="check"><div class="cmd"><code>mvn dependency:tree -Dincludes=com.aayushatharva.brotli4j</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div><div class="cmd"><code>./gradlew -q :app:dependencyInsight --dependency com.aayushatharva.brotli4j --configuration runtimeClasspath</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div><span class="muted">once per module, replacing <code>:app</code></span></td>
+            <td class="bad"><ul><li><code>brotli4j</code> 1.23.0 or earlier</li><li><code>jvmbrotli</code>, any version</li></ul></td>
+            <td class="good"><ul><li>1.24.0 for <code>brotli4j</code> and every <code>native-*</code> artifact</li><li>Replace <code>jvmbrotli</code></li></ul></td></tr>
+          <tr><td>Ruby</td><td class="check"><div class="cmd"><code>grep -E '^    brotli \(' Gemfile.lock</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
+            <td class="bad"><ul><li><code>brotli</code> gem 0.2.1 to 0.9.0</li></ul></td>
             <td class="good"><ul><li>0.9.1</li></ul></td></tr>
           <tr><td>Go</td><td class="check"><div class="cmd"><code>go list -m all | grep brotli</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
-            <td class="bad"><ul><li><code>andybalholm/brotli</code> below v1.2.7 (crash only)</li><li><code>google/brotli</code> (cbrotli) links the system library: check the Linux rows</li></ul></td>
-            <td class="good"><ul><li><code>andybalholm/brotli</code> v1.2.7</li><li>cbrotli: patch the OS library, then rebuild</li></ul></td></tr>
-          <tr><td>Rust</td><td class="check"><div class="cmd"><code>cargo tree | grep -i brotli</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
-            <td class="bad"><ul><li>No advisory for <code>brotli</code> or <code>brotli-decompressor</code></li><li>A <code>-sys</code> crate that vendors the C decoder is affected</li></ul></td>
-            <td class="good"><ul><li>Update the <code>-sys</code> crate once it ships Brotli 1.2.1</li></ul></td></tr>
+            <td class="bad"><ul><li><code>andybalholm/brotli</code> below v1.2.7 (same flaw, crash only)</li><li><code>google/brotli</code> (cbrotli) links the build host's libbrotli: check the Linux rows</li></ul></td>
+            <td class="good"><ul><li><code>andybalholm/brotli</code> v1.2.7</li><li>cbrotli: patch the OS library and restart</li><li>Rebuild if linked statically or shipped in an image</li><li>Bazel: move <code>@org_brotli</code> to 1.2.1 and rebuild</li></ul></td></tr>
+          <tr><td>Rust</td><td class="check"><div class="cmd"><code>grep -i brotli Cargo.lock</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
+            <td class="bad"><ul><li><code>brotlic-sys</code> 0.2.2 or earlier (via <code>brotlic</code> 0.8.2 or earlier)</li><li><code>compu-brotli-sys</code> 1.2.1 or 1.0.10</li><li>Any other <code>-sys</code> crate that vendors an unfixed decoder</li><li>Not affected: pure-Rust <code>brotli</code>, <code>brotli-decompressor</code></li></ul></td>
+            <td class="good"><ul><li>Move to the pure-Rust crates</li><li>No fixed <code>-sys</code> release on crates.io</li></ul></td></tr>
           <tr><td>Debian / Ubuntu</td><td class="check"><div class="cmd"><code>dpkg -l | grep brotli</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
-            <td class="bad"><ul><li>Debian bookworm: below 1.0.9-2+deb12u1</li><li>Debian trixie: below 1.1.0-2+deb13u1</li><li>Debian forky: no fix yet</li><li>Ubuntu 26.10: below 1.2.0-4ubuntu0.1</li><li>Ubuntu 26.04: below 1.2.0-3ubuntu0.1</li><li>Ubuntu 24.04: below 1.1.0-2ubuntu0.1</li><li>Ubuntu 22.04: below 1.0.9-2ubuntu0.1</li><li>Ubuntu 20.04: below 1.0.7-6ubuntu0.1+esm1 (Ubuntu Pro)</li><li>Ubuntu 18.04: below 1.0.3-1ubuntu1.3+esm1 (Ubuntu Pro)</li><li>Ubuntu 16.04: below 1.0.3-1ubuntu1~16.04.2+esm1 (Ubuntu Pro)</li></ul></td>
+            <td class="bad"><ul><li>Debian bookworm: below 1.0.9-2+deb12u1</li><li>Debian trixie: below 1.1.0-2+deb13u1</li><li>Debian forky: no fix yet</li><li>Debian sid: below 1.2.0-4.1</li><li>Debian bullseye: below 1.0.9-2+deb11u1 (Freexian ELTS, paid)</li><li>Debian buster: below 1.0.7-2+deb10u2 (Freexian ELTS, paid)</li><li>Ubuntu 26.10: below 1.2.0-4ubuntu0.1</li><li>Ubuntu 26.04: below 1.2.0-3ubuntu0.1</li><li>Ubuntu 24.04: below 1.1.0-2ubuntu0.1</li><li>Ubuntu 22.04: below 1.0.9-2ubuntu0.1</li><li>Ubuntu 20.04: below 1.0.7-6ubuntu0.1+esm1 (Ubuntu Pro)</li><li>Ubuntu 18.04: below 1.0.3-1ubuntu1.3+esm1 (Ubuntu Pro)</li><li>Ubuntu 16.04: below 1.0.3-1ubuntu1~16.04.2+esm1 (Ubuntu Pro)</li></ul></td>
             <td class="good"><ul><li>Security update</li><li>Restart what links it</li></ul></td></tr>
           <tr><td>Other Linux</td><td class="check"><div class="cmd"><code>rpm -qa | grep brotli</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div><div class="cmd"><code>apk info -v | grep brotli</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div><div class="cmd"><code>pacman -Q brotli</code><button type="button" class="copy" aria-label="Copy command" title="Copy"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 11H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v.5" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></button></div></td>
-            <td class="bad"><ul><li>Upstream 1.0.3 to 1.0.9, 1.1.0 or 1.2.0</li><li>Unless your distro backported the fix: distros patch without changing the version, so check its tracker for CVE-2026-111497</li></ul></td>
-            <td class="good"><ul><li>Security update</li><li>Restart what links it</li></ul></td></tr>
+            <td class="bad"><ul><li>Upstream 1.0.3 to 1.0.9, 1.1.0 or 1.2.0</li><li>Fedora, Arch, Alpine 3.21+, openSUSE Tumbleweed: the version is enough (they ship 1.1.1 or 1.2.1)</li><li>Alpine 3.20 and 3.19: no fix</li><li>Fedora 43: fix in updates-testing only</li><li>RHEL, AlmaLinux, Amazon Linux, SLE: compare the release string (see notes)</li></ul></td>
+            <td class="good"><ul><li>RHEL 10: <code>1.1.0-8.el10_2.1</code></li><li>RHEL 9: <code>1.0.9-10.el9_8.1</code></li><li>RHEL 8: <code>1.0.6-5.el8_10</code></li><li>Amazon Linux 2023: <code>1.1.0-1.amzn2023.0.2</code></li><li>SLE 15: no released fix yet</li><li>Restart what links it</li></ul></td></tr>
         </tbody>
       </table>
     </div>
     <ul class="notes">
-      <li><strong>Python:</strong> Brotli is often a hidden dependency of <code>urllib3</code>, <code>requests</code>, <code>httpx</code> or <code>aiohttp</code>. <code>pipdeptree -r -p Brotli</code> shows what pulls it in.</li>
-      <li><strong>Debian's <code>nodejs</code> package</strong> uses the system <code>libbrotli</code>, so <code>node --version</code> alone tells you nothing there. Check the Debian / Ubuntu row.</li>
+      <li><strong>.NET:</strong> Microsoft also lists PowerShell 7.4, 7.5 and 7.6 (fixed in 7.4.22, 7.5.13 and 7.6.9) and Visual Studio 2019 16.11 (16.11.61), 2022 17.14 (17.14.43) and 2026 18.11 (18.11.2). Visual Studio 2017 15.9 has no fixed build listed.</li>
+      <li><strong>Python:</strong> Scrapy, flask-compress, selenium-wire and django-compression-middleware depend on Brotli directly. <code>urllib3</code> (and so <code>requests</code>), <code>httpx</code> and <code>aiohttp</code> pull it in only through extras (<code>urllib3[brotli]</code>, <code>httpx[brotli]</code>, <code>aiohttp[speedups]</code>). They still decode Brotli whenever it is importable. <code>pipdeptree -r -p Brotli,brotlicffi --extras active</code> (pipdeptree 3.0+) shows what pulls it in.</li>
+      <li><strong>Python wheels with their own Brotli:</strong> Pillow 13.0.0 wheels bundle libbrotli 1.2.0, and no fixed Pillow release exists yet. duckdb vendors an unfixed Brotli 1.1.0 decoder. The pip versions of these packages don't map to Brotli versions.</li>
+      <li><strong>Distro-installed <code>python3-brotli</code></strong> shows the upstream version even after patching. Use the OS row.</li>
+      <li><strong>Java:</strong> <code>jvmbrotli</code> (<code>com.nixxcode.jvmbrotli</code>) is abandoned and bundles Brotli 1.0.7. Replace it.</li>
+      <li><strong>Ruby:</strong> from 0.4.0 the <code>brotli</code> gem links the system libbrotli if <code>libbrotli-dev</code> was present at install. Those builds are fixed by the OS update.</li>
+      <li><strong>Go cbrotli</strong> has no C code of its own. cgo links the build host's libbrotli, so patch the OS library and restart. Bazel builds compile <code>@org_brotli</code> from source, so move that to 1.2.1 and rebuild.</li>
+      <li><strong>Rust:</strong> <code>brotlic-sys</code> bundles Brotli 1.0.9. <code>compu-brotli-sys</code> 1.2.1 and 1.0.10 bundle the unfixed 1.2.0 and 1.0.9 decoders despite their version numbers. Its only fixed release, 1.2.0, is yanked. Judge any other <code>-sys</code> crate by its vendored source: fixed code contains <code>BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH</code>. Grep <code>Cargo.lock</code>, because plain <code>cargo tree</code> shows only the host target.</li>
+      <li><strong>Debian's <code>nodejs</code> package</strong>, and Ubuntu's on 22.04 and later, use the system <code>libbrotli</code>, so <code>node --version</code> alone tells you nothing there. Check the Debian / Ubuntu row. Ubuntu 20.04's <code>nodejs</code> 10.19 bundles its own Brotli and has no fix. Updating <code>libbrotli1</code> doesn't cover it.</li>
+      <li><strong>Debian bookworm</strong> has no fixed build for armel, mips64el, mipsel or s390x.</li>
+      <li><strong>RHEL, AlmaLinux, Amazon Linux and SLE keep the old version number</strong> when they patch, so compare the full release string (e.g. <code>1.0.9-10.el9_8.1</code>) against the vendor tracker, not the upstream version.</li>
+      <li><strong>Bundled copies on RPM distros:</strong> some packages bundle their own Brotli and won't show in <code>rpm -qa | grep brotli</code>. These include Firefox, Thunderbird, the RHEL 8/9 <code>nodejs:24</code> and <code>nodejs:26</code> modules, and on SUSE ghostscript, qemu, ovmf, texlive and mozjs.</li>
+      <li><strong>Scanners stay silent for several of these.</strong> Bun, Brotli4j, the Ruby gem, curl_cffi, <code>andybalholm/brotli</code> and the Rust <code>-sys</code> crates have no entry in the GitHub Advisory Database, OSV, the Go vulnerability database or RustSec. Dependabot, OSV-Scanner, govulncheck, bundler-audit and cargo audit won't flag them.</li>
       <li><strong>Containers:</strong> run the same checks inside every image you ship, for example <code>docker run --rm --network=none &lt;image&gt; node --version</code> (or <code>podman run</code>). Updating the host does not fix an image. Rebuild it.</li>
     </ul>
   </section>
@@ -346,8 +358,9 @@ footer { border-color: var(--rule); color: var(--muted); }
   <section class="read">
     <h3>Vendored Brotli source</h3>
     <p>If you vendor Brotli's C source, fixed code contains the error name <code>BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH</code>. This lists decoder files that lack it:</p>
-    <div class="code"><button type="button" id="copy-vendored">Copy</button><pre>grep -rIl --include='decode.c' --include='decode.cpp' 'BrotliDecoderDecompressStream' . |
-  xargs -r grep -L 'BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH'</pre></div>
+    <div class="code"><button type="button" id="copy-vendored">Copy</button><pre>grep -rIlZ --include='decode.c' --include='decode.cpp' 'BrotliDecoderDecompressStream' . |
+  xargs -0 -r grep -L 'BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH'</pre></div>
+    <p class="muted">Copies older than 1.0.3 also show up but are not affected.</p>
     <p class="muted">The Debian and Ubuntu security patches add the same error name. Compiled libraries show it as <code>_ERROR_FORMAT_BLOCK_SWITCH</code> (1.1 and later) or a bare <code>BLOCK_SWITCH</code> (1.0.x). Still judge OS packages by version.</p>
   </section>
 
@@ -389,18 +402,31 @@ less scripts/vuln-check-CVE2026-111497-brotli.sh   # review before running</pre>
   <section id="sources">
     <h2>Sources</h2>
     <p class="muted read">Versions on this page come from these advisories, checked on 2026-10-29.</p>
+    <p class="src"><a href="references.html"><span>Every version claim with its source</span></a></p>
     <ul class="sources">
       <li><a href="https://www.cve.org/CVERecord?id=CVE-2026-111497">CVE-2026-111497 record</a></li>
+      <li><a href="https://github.com/google/brotli/releases/tag/v1.0.10">Google Brotli v1.0.10 release</a></li>
+      <li><a href="https://github.com/google/brotli/releases/tag/v1.1.1">Google Brotli v1.1.1 release</a></li>
       <li><a href="https://github.com/google/brotli/releases/tag/v1.2.1">Google Brotli v1.2.1 release</a></li>
       <li><a href="https://nodejs.org/en/blog/vulnerability/october-2026-security-releases">Node.js October 2026 security releases</a></li>
       <li><a href="https://github.com/oven-sh/bun/security/advisories/GHSA-663w-cv8g-jj2p">Bun GHSA-663w-cv8g-jj2p</a></li>
       <li><a href="https://github.com/dotnet/announcements/issues/494">.NET announcement #494</a></li>
+      <li><a href="https://msrc.microsoft.com/update-guide/vulnerability/CVE-2026-111497">Microsoft MSRC CVE-2026-111497</a></li>
       <li><a href="https://github.com/advisories/GHSA-9v8h-qqgm-4m35">PyPI Brotli, brotlicffi GHSA-9v8h-qqgm-4m35</a></li>
       <li><a href="https://github.com/lexiforest/curl_cffi/releases/tag/v0.17.0">curl_cffi v0.17.0 release notes</a></li>
       <li><a href="https://github.com/hyperxpro/Brotli4j/security/advisories/GHSA-x524-jrqf-vwq6">Brotli4j GHSA-x524-jrqf-vwq6</a></li>
       <li><a href="https://github.com/andybalholm/brotli/security/advisories/GHSA-c9gr-gmg4-2vqv">andybalholm/brotli GHSA-c9gr-gmg4-2vqv</a></li>
       <li><a href="https://security-tracker.debian.org/tracker/CVE-2026-111497">Debian security tracker</a></li>
+      <li><a href="https://security-tracker.debian.org/tracker/DLA-4855-1">Debian DLA-4855-1</a></li>
+      <li><a href="https://security-tracker.debian.org/tracker/DSA-6582-1">Debian DSA-6582-1</a></li>
+      <li><a href="https://www.freexian.com/lts/extended/updates/ela-1861-1-brotli/">Freexian ELA-1861-1</a></li>
       <li><a href="https://ubuntu.com/security/CVE-2026-111497">Ubuntu CVE tracker</a></li>
+      <li><a href="https://ubuntu.com/security/notices/USN-8956-1">Ubuntu USN-8956-1</a></li>
+      <li><a href="https://access.redhat.com/security/cve/CVE-2026-111497">Red Hat CVE page</a></li>
+      <li><a href="https://www.suse.com/security/cve/CVE-2026-111497.html">SUSE CVE page</a></li>
+      <li><a href="https://security.alpinelinux.org/vuln/CVE-2026-111497">Alpine security tracker</a></li>
+      <li><a href="https://bodhi.fedoraproject.org/updates/?packages=brotli">Fedora Bodhi brotli updates</a></li>
+      <li><a href="https://alas.aws.amazon.com/AL2023/ALAS2023-2026-3334.html">Amazon Linux ALAS2023-2026-3334</a></li>
       <li><a href="https://github.com/envoyproxy/envoy/security/advisories/GHSA-3wvj-j6qm-62mr">Envoy GHSA-3wvj-j6qm-62mr</a></li>
       <li><a href="https://istio.io/latest/news/security/istio-security-2026-007/">Istio ISTIO-SECURITY-2026-007</a></li>
     </ul>
