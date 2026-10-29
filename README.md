@@ -1,14 +1,9 @@
 # HTTP2Shell / Node2Shell exposure check (CVE-2026-111497)
 
-Find and fix systems affected by CVE-2026-111497, the out-of-bounds write in Google's Brotli decoder also known as HTTP2Shell and Node2Shell. Attackers are exploiting it to crash services, leak memory or run code, with no login. Node.js, Bun, Python, .NET, Java, curl, Envoy and OS `libbrotli` packages are affected.
+**Is your service exposed to HTTP2Shell?** It's a remote code execution bug in Google's Brotli decoder, under active attack. It affects Node.js, Bun, Python, .NET, Java, curl, Envoy and OS `libbrotli` packages.
 
-This repository contains:
-
-- **A guide** (`index.html`, published at https://fieldse.github.io/brotli-node2shell-check/): manual checks for each stack, with affected and fixed versions.
-- **A checker script** (`scripts/vuln-check-CVE2026-111497-brotli.sh`): runs the same checks on one host and, with `-c`, its local Docker or Podman images. It only reads files and changes nothing.
-- **A test coverage page** (`tests.html`): which tests cover each of the script's checks.
-
-Fixed versions come from the vendor advisories listed in the guide, checked on 2026-10-29.
+- **Check by hand:** [read the guide](https://fieldse.github.io/brotli-node2shell-check/) for the command and fixed version for each stack.
+- **Check automatically:** run the read-only script in [Quick start](#quick-start).
 
 ## Contents
 
@@ -26,7 +21,7 @@ cd brotli-node2shell-check
 ./scripts/vuln-check-CVE2026-111497-brotli.sh --help         # all options
 ```
 
-`FAIL` means a known-vulnerable version, and `WARN` needs manual review. The script exits 0 when nothing fails, 1 on any `FAIL` (or any `WARN` with `--strict`), and 2 on a usage error, so it can gate CI.
+`FAIL` means a known-vulnerable version, and `WARN` needs manual review. The script exits 0 when nothing fails, 1 on any `FAIL` (or any `WARN` with `--strict`), and 2 on a usage error, so it can gate CI. See [how the script is tested](https://fieldse.github.io/brotli-node2shell-check/tests.html).
 
 ## Script checks
 
