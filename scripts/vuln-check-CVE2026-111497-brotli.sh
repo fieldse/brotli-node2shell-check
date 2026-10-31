@@ -13,6 +13,10 @@ DOTNET_FIXED="8.0=8.0.33 9.0=9.0.22 10.0=10.0.14"
 BROTLI_FIXED="1.0=1.0.10 1.1=1.1.1 1.2=1.2.1"
 ENVOY_FIXED="1.36=1.36.12 1.37=1.37.8 1.38=1.38.6 1.39=1.39.3 1.40=1.40.0"
 ISTIO_FIXED="1.29=1.29.9 1.30=1.30.6 1.31=1.31.2"
+# Electron's Node links Chromium's Brotli, which carries the fix from Chromium 148 (Electron 42); sources in the README.
+ELECTRON_FIXED="42=42.0.0 43=43.0.0 44=44.0.0 45=45.0.0"
+# First upstream release with the flawed decoder code.
+BROTLI_FIRST_AFFECTED="1.0.3"
 BROTLI_DEB_FIXED="1.0.9-2+deb12u1 1.1.0-2+deb13u1 1.2.0-4.1"
 # Debian suite builds the security tracker lists as vulnerable (binNMU suffixes included).
 BROTLI_DEB_VULN='^(1\.0\.9-2|1\.1\.0-2|1\.2\.0-4)(\+b[0-9]+)?$'
@@ -30,8 +34,25 @@ FIX_MARKER_RE='_ERROR_FORMAT_BLOCK_SWITCH|^BLOCK_SWITCH$'
 FIX_MARKER_SRC="BROTLI_DECODER_ERROR_FORMAT_BLOCK_SWITCH"
 # Seconds to wait for "docker info" / "podman info" before treating the engine as down.
 ENGINE_TIMEOUT=5
+# find -path patterns no walk enters, one per line.
+BUILTIN_PRUNE='*/.git
+*/.Trash
+*/Library/Containers
+*/Library/Group Containers
+*/Library/Mail
+*/Library/Messages
+*/Library/Safari
+*/Library/CloudStorage
+*/Library/Mobile Documents
+*/.local/share/containers
+*/Xcode*.app
+*.app/Contents/Developer'
 
 ROOTS=""
+EXCLUDES=""
+DEEP=0
+HOST_NODE_BIN=""
+PRUNE=()
 DO_CONTAINERS=0
 IMAGES=""
 ENGINE=""
@@ -47,20 +68,27 @@ CHECK_NO="00"
 NODE_STATE="unknown"
 SYS_BROTLI="unknown"
 HOST_OS=""
+BREW_EXCLUDED=""
 WORK=""
 INDEX=""
 
 # Show usage information
 function usage() {
   cat <<EOF
-Usage: $(basename "$0") [-r|--root ROOT]... [-c|--containers] [-i|--image IMAGE]... [-e|--engine ENGINE]
-       [-q|--quiet] [-s|--strict] [-h|--help]
+Usage: $(basename "$0") [-r|--root ROOT]... [-x|--exclude DIR]... [-d|--deep] [-c|--containers]
+       [-i|--image IMAGE]... [-e|--engine ENGINE] [-q|--quiet] [-s|--strict] [-h|--help]
 
 Read-only check for the Brotli decoder flaw CVE-2026-111497 (Node2Shell / HTTP2Shell).
 
 Options:
-  -r, --root ROOT   Directory to scan for package files and bundled copies (repeatable, default \$HOME).
-                    Also accepts --root=ROOT
+  -r, --root ROOT   Directory to scan for package files and bundled copies (repeatable).
+                    Default: \$HOME, the Homebrew prefix if brew is installed, and /Applications on macOS.
+                    Xcode and every .app/Contents/Developer tree are skipped. Also accepts --root=ROOT
+  -x, --exclude DIR Directory the scan never enters, at any depth (repeatable). A symlinked DIR also excludes
+                    its target. Host tools installed inside DIR (node, bun, python3 sys.path entries, brew,
+                    dotnet, curl, envoy, istioctl) are skipped, not run. Also accepts --exclude=DIR
+  -d, --deep        Also search every executable and library inside .app bundles under the roots for an
+                    embedded Brotli decoder (slow: minutes for a full /Applications)
   -c, --containers  Also probe local Docker or Podman images (runs a version probe with --network=none)
   -i, --image IMAGE Probe only this local image (repeatable, implies -c)
   -e, --engine ENGINE
@@ -74,8 +102,11 @@ Output lines start with PASS, FAIL, WARN, INFO or SKIP, then the check number in
 location, found and fixed version.
 FAIL means a known-vulnerable version. WARN means it needs a manual look (unknown version, distro build,
 exposure path on an unpatched runtime). The fix marker is an error-name string fixed decoders compile in.
-Upstream 1.0.10 / 1.1.1 / 1.2.1, the Debian and Ubuntu security builds and .NET 8.0.33 all carry it;
-OS packages are still judged by version, and a missing marker in other builds is a WARN, not a FAIL.
+Upstream 1.0.10 / 1.1.1 / 1.2.1, the Debian and Ubuntu security builds and .NET 8.0.33 all carry it.
+OS packages and Electron apps are judged by version. A bundled libbrotlidec without the marker is a FAIL
+when its file name shows an affected version (1.0.3 and later, below the fix), and a WARN otherwise.
+In checks 20 and 21 the marker alone gives at most WARN: linkers merge identical strings, so it cannot
+show that every decoder copy in a binary is fixed.
 
 Checks (the number printed on each line):
   00 header                           10 Java brotli4j
@@ -84,14 +115,17 @@ Checks (the number printed on each line):
   03 nvm / volta / asdf / fnm Node    13 Rust crates
   04 .NET runtimes                    14 vendored decode.c sources
   05 Python dist-info / egg-info      15 bundled libbrotlidec copies
-  06 Python compiled extensions       16 curl
+  06 Python and Perl extensions       16 curl
   07 Python pins and lock files       17 Envoy, Istio, nginx
   08 host Python packages             18 container preflight and images (-c)
-  09 npm middleware exposure
+  09 npm middleware exposure          19 other bundled node binaries
+                                      20 Electron apps
+                                      21 app bundle binaries (-d)
 
 Exit codes: 0 no FAIL, 1 any FAIL (or WARN with --strict), 2 usage or environment error.
 
 Examples:
+  $(basename "$0") -x ~/private -q
   $(basename "$0") -r ~/src -r /srv -q
   $(basename "$0") --root=/srv --containers
   $(basename "$0") -e podman -i docker.io/library/node:24
@@ -245,8 +279,16 @@ function judge_branched() {
   return 0
 }
 
-# Print yes if a file contains a compiled fix marker, else no
+# Print yes if a file contains a compiled fix marker, else no; the NUL split runs only for a possible bare marker
 function has_marker() {
+  if LC_ALL=C grep -aqF -e _ERROR_FORMAT_BLOCK_SWITCH "$1" 2>/dev/null; then
+    echo yes
+    return 0
+  fi
+  if ! LC_ALL=C grep -aqF -e BLOCK_SWITCH "$1" 2>/dev/null; then
+    echo no
+    return 0
+  fi
   if { LC_ALL=C tr '\000' '\n' < "$1" 2>/dev/null || true; } | LC_ALL=C grep -aqE -- "$FIX_MARKER_RE"; then
     echo yes
   else
@@ -402,7 +444,7 @@ function judge_runtime() {
 # Judge a runtime binary on the host or under a scan root
 function judge_runtime_binary() {
   local tool="$1" where="$2" v="$3" bin="$4" linked=no marker=unknown
-  if [[ -n "$bin" && -f "$bin" ]]; then
+  if [[ -n "$bin" && -f "$bin" ]] && ! is_excluded_target "$bin"; then
     linked=$(links_libbrotli "$bin")
     marker=$(has_marker "$bin")
   fi
@@ -423,26 +465,60 @@ function idx() {
   grep -E -- "$1" "$INDEX" || true
 }
 
+# Print a path with the find -path pattern characters \ * ? [ backslash-escaped, so it matches only itself
+function glob_escape() {
+  printf '%s\n' "$1" | sed 's/[\\*?[]/\\&/g'
+}
+
+# Set PRUNE to the find expression for directories no walk enters: built-in skips plus --exclude paths
+function build_prune() {
+  local pat ex test=-path sep=""
+  if [[ "$(uname -s)" == "Darwin" ]]; then test=-ipath; fi
+  PRUNE=( \( )
+  while IFS= read -r pat; do
+    [[ -n "$pat" ]] || continue
+    PRUNE+=( ${sep:+"$sep"} -path "$pat" )
+    sep=-o
+  done <<< "$BUILTIN_PRUNE"
+  while IFS= read -r ex; do
+    [[ -n "$ex" ]] || continue
+    PRUNE+=( -o "$test" "$(glob_escape "$ex")" )
+  done <<< "$EXCLUDES"
+  PRUNE+=( \) -prune )
+}
+
 # Walk the scan roots once and record candidate files and directories
 function build_index() {
   local root
   : > "$INDEX"
   while IFS= read -r root; do
     [[ -n "$root" ]] || continue
-    find -H "$root" -xdev \
-      \( -path '*/.git' -o -path '*/.Trash' -o -path '*/Library/Containers' -o -path '*/Library/Group Containers' \
-         -o -path '*/Library/Mail' -o -path '*/Library/Messages' -o -path '*/Library/Safari' \
-         -o -path '*/Library/CloudStorage' -o -path '*/Library/Mobile Documents' -o -path '*/.local/share/containers' \) -prune -o \
+    find -H "$root" -xdev ${PRUNE[@]+"${PRUNE[@]}"} -o \
       \( -type d \( -path '*/.nvm/versions/node/v*' -o -path '*/.volta/tools/image/node/*' \
          -o -path '*/.asdf/installs/nodejs/*' -o -path '*/fnm/node-versions/v*' \) -print -prune \) -o \
-      \( -name '*.dist-info' -type d -print -prune \) -o \( -name '*.egg-info' -print -prune \) -o \
+      \( -name '*.dist-info' -type d -print -prune \) -o \( -name '*.egg-info' -type d -print -prune \) -o \
       \( -type f \( -name package.json -o -name package-lock.json -o -name pnpm-lock.yaml -o -name yarn.lock \
          -o -name bun.lock -o -name go.mod -o -name Cargo.lock -o -name Gemfile.lock -o -name pom.xml \
          -o -name 'build.gradle*' -o -name '*brotli4j*.jar' -o -name 'libbrotlidec*.so*' -o -name 'libbrotlidec*.dylib' \
          -o -name 'libbrotlidec*.a' -o -name '_brotli*.so' \
          -o -path '*/brotlicffi/*.so' -o -path '*/curl_cffi/*.so' -o -name decode.c -o -name decode.cpp \
-         -o -name poetry.lock -o -name uv.lock -o -name pdm.lock -o -name 'requirements*.txt' \) -print \) \
+         -o -name poetry.lock -o -name uv.lock -o -name pdm.lock -o -name 'requirements*.txt' \
+         -o -path '*/auto/IO/Compress/Brotli/Brotli.bundle' -o -path '*/auto/IO/Compress/Brotli/Brotli.so' \
+         -o -name 'Electron Framework' \) -print \) -o \
+      \( -type f -name node -perm -u+x -print \) \
       2>/dev/null >> "$INDEX" || true
+  done <<< "$ROOTS"
+}
+
+# Walk the scan roots for executables and libraries inside .app bundles (--deep)
+function build_deep_index() {
+  local root
+  : > "$WORK/deep.txt"
+  while IFS= read -r root; do
+    [[ -n "$root" ]] || continue
+    find -H "$root" -xdev ${PRUNE[@]+"${PRUNE[@]}"} -o \
+      \( -type f -path '*.app/Contents/*' -size +100k \( -perm -u+x -o -name '*.dylib' -o -name '*.so' \) -print \) \
+      2>/dev/null >> "$WORK/deep.txt" || true
   done <<< "$ROOTS"
 }
 
@@ -481,7 +557,8 @@ function py_judge() {
   fixed=$(py_fixed "$name")
   [[ -n "$fixed" ]] || return 0
   case "$installer" in
-    pip|uv|poetry|pdm|pipenv|"") judge "$name" "$where" "$ver" "$fixed" FAIL ;;
+    # Homebrew writes INSTALLER "brew" and installs formula resources from the upstream PyPI release.
+    pip|uv|poetry|pdm|pipenv|brew|"") judge "$name" "$where" "$ver" "$fixed" FAIL ;;
     unknown)
       case "$where" in
         */usr/lib/python3*|*/usr/lib64/python3*)
@@ -509,11 +586,16 @@ function check_host_runtimes() {
       emit INFO "$tool [host] not installed"
       continue
     fi
+    if skip_excluded_cmd "$tool"; then continue; fi
     bin=$("$tool" -p 'process.execPath' 2>/dev/null | head -1 || true)
     if [[ -z "$bin" || ! -f "$bin" ]]; then
-      bin=$(command -v "$tool")
-      bin="$(cd "$(dirname "$bin")" && pwd -P)/$(basename "$bin")"
+      bin=$(phys_path "$(command -v "$tool")")
     fi
+    if is_excluded_target "$bin"; then
+      emit SKIP "$tool [host] $bin is inside an excluded directory, not checked"
+      continue
+    fi
+    if [[ "$tool" == "node" ]]; then HOST_NODE_BIN="$bin"; fi
     line=$("$tool" --version 2>/dev/null | head -1 || true)
     v=$(parse_rt_version "$tool" "$line" || true)
     if [[ -z "$v" ]]; then
@@ -551,6 +633,7 @@ function check_node_version_dirs() {
 function check_dotnet() {
   local name v
   have_cmd dotnet || return 0
+  if skip_excluded_cmd dotnet; then return 0; fi
   dotnet --list-runtimes 2>/dev/null > "$WORK/dotnet.txt" || true
   while read -r name v _; do
     [[ "$name" == "Microsoft.NETCore.App" ]] || continue
@@ -565,7 +648,7 @@ function check_dotnet() {
 
 # Judge PyPI packages from installed dist-info and egg-info metadata under the scan roots
 function scan_python_dist_info() {
-  local list p base x name ver n=0
+  local list p base x name ver n=0 installer
   list=$(idx '\.(dist|egg)-info$')
   while IFS= read -r p; do
     [[ -n "$p" ]] || continue
@@ -576,7 +659,11 @@ function scan_python_dist_info() {
     ver=${ver%%-*}
     [[ -n "$(py_fixed "$name")" ]] || continue
     n=$((n + 1))
-    py_judge "$name" "$ver" "$p" "$(head -1 "$p/INSTALLER" 2>/dev/null || echo unknown)"
+    installer=unknown
+    if ! is_excluded_target "$p/INSTALLER"; then
+      installer=$(head -1 "$p/INSTALLER" 2>/dev/null || echo unknown)
+    fi
+    py_judge "$name" "$ver" "$p" "$installer"
   done <<< "$list"
   if [[ "$n" -eq 0 ]]; then
     emit INFO "python [dist-info] none of Brotli, brotlicffi, curl_cffi installed under scan roots"
@@ -584,19 +671,21 @@ function scan_python_dist_info() {
   return 0
 }
 
-# Report the fix marker in compiled Python extensions that bundle the decoder
+# Report the fix marker in compiled Python and Perl (IO::Compress::Brotli) extensions that bundle the decoder
 function scan_python_extensions() {
-  local p
+  local p kind
   while IFS= read -r p; do
-    [[ -n "$p" ]] || continue
+    [[ -n "$p" && ! -L "$p" ]] || continue
+    kind="python extension"
+    if [[ "$p" == */auto/IO/Compress/Brotli/* ]]; then kind="perl IO::Compress::Brotli"; fi
     if [[ "$(has_marker "$p")" == "yes" ]]; then
-      emit PASS "python extension [$p] fix marker present"
+      emit PASS "$kind [$p] fix marker present"
     elif [[ "$(links_libbrotli "$p")" == "yes" ]]; then
-      emit INFO "python extension [$p] links the system libbrotli; see OS packages"
+      emit INFO "$kind [$p] links the system libbrotli; see OS packages"
     else
-      emit WARN "python extension [$p] bundles a Brotli decoder without the fix marker, upgrade the owning package"
+      emit WARN "$kind [$p] bundles a Brotli decoder without the fix marker, upgrade the owning package"
     fi
-  done <<< "$(idx '/_brotli[^/]*\.so$|/brotlicffi/[^/]*\.so$|/curl_cffi/[^/]*\.so$')"
+  done <<< "$(idx '/_brotli[^/]*\.so$|/brotlicffi/[^/]*\.so$|/curl_cffi/[^/]*\.so$|/auto/IO/Compress/Brotli/Brotli\.(bundle|so)$')"
   return 0
 }
 
@@ -632,11 +721,22 @@ function scan_python_pins() {
   return 0
 }
 
-# Print "name version installer location" for the host Python's Brotli packages, without importing them
+# Print "name version installer location" for the host Python's Brotli packages, without importing them;
+# sys.path entries inside an excluded directory are not searched
 function host_python_dists() {
-  python3 -B -c '
-import importlib.metadata as m
-for d in m.distributions():
+  BROTLI_CHECK_EXCLUDES="$EXCLUDES" python3 -B -c '
+import importlib.metadata as m, os, sys
+fold = sys.platform == "darwin"
+def norm(p):
+    return p.lower() if fold else p
+ex = [norm(e.rstrip("/")) for e in os.environ.get("BROTLI_CHECK_EXCLUDES", "").split("\n") if e.strip("/")]
+def excluded(p):
+    for q in (os.path.abspath(p), os.path.realpath(p)):
+        q = norm(q)
+        if any(q == e or q.startswith(e + "/") for e in ex):
+            return True
+    return False
+for d in m.distributions(path=[p for p in sys.path if not excluded(p or ".")]):
     n = (d.metadata["Name"] or "").lower().replace("_", "-")
     if n in ("brotli", "brotlicffi", "curl-cffi"):
         i = (d.read_text("INSTALLER") or "").strip() or "unknown"
@@ -647,6 +747,7 @@ for d in m.distributions():
 # Judge Brotli packages in the host Python environment
 function check_host_python_pkgs() {
   local n v i loc
+  if have_cmd python3 && skip_excluded_cmd python3; then return 0; fi
   if have_cmd python3 && host_python_dists > "$WORK/py.txt"; then
     while read -r n v i loc; do
       [[ -n "$n" && -n "${v:-}" ]] || continue
@@ -806,15 +907,154 @@ function scan_decoder_sources() {
 
 # Check libbrotlidec copies under the scan roots for the fix marker
 function scan_bundled_libbrotli() {
-  local p
+  local p v fixed
   while IFS= read -r p; do
     [[ -n "$p" && -f "$p" && ! -L "$p" ]] || continue
     if [[ "$(has_marker "$p")" == "yes" ]]; then
       emit PASS "libbrotlidec [$p] fix marker present"
+      continue
+    fi
+    v=$(printf '%s\n' "${p##*/}" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || true)
+    fixed=""
+    if [[ -n "$v" ]]; then fixed=$(list_get "$(printf '%s\n' "$v" | cut -d. -f1-2)" "$BROTLI_FIXED"); fi
+    if [[ -n "$fixed" && "$(ver_cmp "$v" "$BROTLI_FIRST_AFFECTED")" == "-1" ]]; then
+      emit INFO "libbrotlidec [$p] found $v (file name), older than the first affected release $BROTLI_FIRST_AFFECTED"
+    elif [[ -n "$fixed" && "$(ver_cmp "$v" "$fixed")" == "-1" ]]; then
+      emit FAIL "libbrotlidec [$p] found $v (file name) and no fix marker, fixed $fixed; update the owning package or app"
     else
       emit WARN "libbrotlidec [$p] no fix marker; fixed upstream, Debian and Ubuntu builds carry it, so update the owning app or check its build source"
     fi
   done <<< "$(idx '/libbrotlidec[^/]*\.(so[.0-9]*|dylib|a)$')"
+  return 0
+}
+
+# Print "decoders markers": how many Brotli decoder error tables a binary holds, and how many carry the fix
+function decoder_counts() {
+  { LC_ALL=C tr '\000' '\n' < "$1" 2>/dev/null || true; } |
+    LC_ALL=C grep -aE '^((_ERROR_FORMAT_)?EXUBERANT_NIBBLE|_ERROR_FORMAT_BLOCK_SWITCH|BLOCK_SWITCH)$' |
+    awk '/EXUBERANT_NIBBLE/ { d++ } /BLOCK_SWITCH/ { m++ } END { printf "%d %d\n", d, m }' || true
+}
+
+# True if a file starts with a Mach-O or ELF magic number
+function is_native_binary() {
+  local magic
+  magic=$(LC_ALL=C od -An -tx1 -N4 "$1" 2>/dev/null | tr -d ' \n' || true)
+  case "$magic" in
+    cffaedfe|cefaedfe|feedfacf|feedface|cafebabe|bebafeca|cafebabf|7f454c46) return 0 ;;
+  esac
+  return 1
+}
+
+# Print a node binary's distinct release-URL versions, one per line, then "marker yes|no|bare", in one read
+# ("bare" means a BLOCK_SWITCH string that has_marker must confirm is a whole NUL-terminated string)
+function node_binary_facts() {
+  { LC_ALL=C grep -aoE 'nodejs\.org/download/release/v[0-9]+\.[0-9]+\.[0-9]+|_ERROR_FORMAT_BLOCK_SWITCH|BLOCK_SWITCH' "$1" 2>/dev/null || true; } |
+    awk '/^nodejs/ { sub(/.*\/v/, ""); if (!seen[$0]++) print; next }
+      /^_ERROR_FORMAT_/ { p = 1; next } { b = 1 }
+      END { print "marker " (p ? "yes" : (b ? "bare" : "no")) }'
+}
+
+# Judge node binaries bundled by apps and tools outside the version managers, without running them
+function scan_bundled_node() {
+  local p v n=0 m facts
+  while IFS= read -r p; do
+    [[ -n "$p" && "$p" != "$HOST_NODE_BIN" ]] || continue
+    is_native_binary "$p" || continue
+    n=$((n + 1))
+    facts=$(node_binary_facts "$p")
+    m=$(printf '%s\n' "$facts" | sed -n 's/^marker //p')
+    if [[ "$m" == "bare" ]]; then m=$(has_marker "$p"); fi
+    v=$(printf '%s\n' "$facts" | grep -v '^marker ' || true)
+    if [[ "$v" == *$'\n'* ]]; then
+      emit WARN "node [$p] embeds conflicting release versions ($(printf '%s' "$v" | tr '\n' ' ' | sed 's/ /, /g')), check the owning app"
+      continue
+    fi
+    if [[ -n "$v" ]]; then
+      judge_runtime node "$p" "$v" "$(links_libbrotli "$p")" "$m" "$SYS_BROTLI"
+      continue
+    fi
+    if [[ "$m" == "yes" ]]; then
+      emit PASS "node [$p] version not found, bundles a decoder with the fix marker"
+    else
+      emit WARN "node [$p] version not found and no fix marker, check the owning app"
+    fi
+  done <<< "$(idx '/node$')"
+  if [[ "$n" -eq 0 ]]; then
+    emit INFO "node [bundled] no other node binaries under scan roots"
+  fi
+  return 0
+}
+
+# Print the CFBundleVersion of an Info.plist, or nothing if it resolves into an excluded directory
+function plist_version() {
+  if is_excluded_target "$1"; then return 0; fi
+  if have_cmd plutil; then
+    plutil -extract CFBundleVersion raw -o - "$1" 2>/dev/null && return 0
+  fi
+  sed -n '/<key>CFBundleVersion<\/key>/{n;s#.*<string>\([^<]*\)</string>.*#\1#p;}' "$1" 2>/dev/null | head -1 || true
+}
+
+# Emit the verdict for one binary from its decoder and fix-marker counts; markers alone never PASS
+function judge_embedded() {
+  local subject="$1" where="$2" d="$3" m="$4"
+  if ((d == 0 && m == 0)); then
+    emit WARN "$subject [$where] has Brotli decoder symbols but no error-name table to check, ask the vendor"
+  elif ((d > 0 && m >= d)); then
+    emit WARN "$subject [$where] embeds $d Brotli decoder(s), fix marker present, but merged strings mean this cannot confirm every copy; check the vendor's Brotli version"
+  elif ((m > 0)); then
+    emit WARN "$subject [$where] embeds $d Brotli decoders, only $m with the fix marker; update the app"
+  else
+    emit WARN "$subject [$where] embeds a Brotli decoder without the fix marker; update the app"
+  fi
+}
+
+# Check Electron apps by the Electron version in the framework's Info.plist, with the fix marker as a cross-check
+function scan_electron() {
+  local p fw v d m n=0
+  while IFS= read -r p; do
+    [[ -n "$p" && ! -L "$p" ]] || continue
+    is_native_binary "$p" || continue
+    n=$((n + 1))
+    fw="${p%%/Electron Framework.framework/*}/Electron Framework.framework"
+    v=$(plist_version "$fw/Resources/Info.plist")
+    if [[ -n "$v" ]]; then
+      judge_branched electron "$p" "$v" "$ELECTRON_FIXED" 1 FAIL FAIL "Chromium before 148 ships an unfixed Brotli decoder"
+      [[ "$LAST_LEVEL" == "PASS" ]] || continue
+      [[ "$(has_marker "$p")" == "no" ]] || continue
+    fi
+    read -r d m <<< "$(decoder_counts "$p")"
+    if [[ -n "$v" ]]; then
+      if ((d == 0 && m == 0)); then
+        emit WARN "electron [$p] version is fixed but no Brotli decoder strings found, check the build source"
+      elif ((m == 0)); then
+        emit WARN "electron [$p] version is fixed but the bundled decoder lacks the fix marker, check the build source"
+      fi
+    elif ((d == 0 && m == 0)); then
+      emit WARN "electron ? [$p] no version in Info.plist and no Brotli decoder strings found (stripped build), check the app vendor"
+    else
+      judge_embedded "electron ?" "$p" "$d" "$m"
+    fi
+  done <<< "$(idx '/Electron Framework$')"
+  if [[ "$n" -eq 0 ]]; then
+    emit INFO "electron [apps] no Electron apps under scan roots"
+  fi
+  return 0
+}
+
+# Search executables and libraries inside .app bundles for an embedded Brotli decoder (--deep)
+function scan_app_binaries() {
+  local p d m
+  build_deep_index
+  LC_ALL=C sort -u "$WORK/deep.txt" > "$WORK/deep.sorted"
+  LC_ALL=C sort -u "$INDEX" > "$WORK/index.sorted"
+  LC_ALL=C comm -23 "$WORK/deep.sorted" "$WORK/index.sorted" > "$WORK/deep.todo"
+  while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    is_native_binary "$p" || continue
+    LC_ALL=C grep -aqF -e EXUBERANT_NIBBLE -e BrotliDecoderDecompressStream "$p" 2>/dev/null || continue
+    read -r d m <<< "$(decoder_counts "$p")"
+    judge_embedded "app binary" "$p" "$d" "$m"
+  done < "$WORK/deep.todo"
   return 0
 }
 
@@ -909,7 +1149,7 @@ function list_os_packages() {
   if have_cmd pacman; then
     pacman -Q brotli 2>/dev/null | sed 's/^/pacman /' || true
   fi
-  if have_cmd brew; then
+  if have_cmd brew && ! brew_excluded; then
     HOMEBREW_NO_AUTO_UPDATE=1 brew list --versions brotli 2>/dev/null | awk '{for (i = 2; i <= NF; i++) print "brew", $1, $i}' || true
   fi
   return 0
@@ -921,6 +1161,9 @@ function check_os_packages() {
   for f in /etc/os-release /usr/lib/os-release; do
     if [[ -r "$f" ]]; then HOST_OS=$(os_key "$f"); break; fi
   done
+  if have_cmd brew && brew_excluded; then
+    emit SKIP "brew [host] $BREW_EXCLUDED is inside an excluded directory, Homebrew packages not checked"
+  fi
   list_os_packages > "$WORK/pk.txt"
   while read -r mgr name ver; do
     [[ -n "$name" && -n "${ver:-}" ]] || continue
@@ -944,6 +1187,7 @@ function check_os_packages() {
 function check_curl_brotli() {
   local v
   have_cmd curl || return 0
+  if skip_excluded_cmd curl; then return 0; fi
   v=$(curl -V 2>/dev/null | grep -Eo 'brotli/[0-9.]+' | head -1 | cut -d/ -f2 || true)
   if [[ -n "$v" && "$SYS_BROTLI" != "unknown" && "$(links_libbrotli "$(command -v curl)")" == "yes" ]]; then
     if [[ "$SYS_BROTLI" == "fixed" ]]; then
@@ -964,13 +1208,13 @@ function check_curl_brotli() {
 # Check Envoy and Istio versions and configs that enable Brotli decompression
 function check_proxies() {
   local v p
-  if have_cmd envoy; then
+  if have_cmd envoy && ! skip_excluded_cmd envoy; then
     v=$(envoy --version 2>/dev/null | sed -n 's#.*/\([0-9][0-9.]*\)/.*#\1#p' | head -1 || true)
     if [[ -n "$v" ]]; then
       judge_branched envoy host "$v" "$ENVOY_FIXED" 2 WARN WARN "affected only with the Brotli decompressor configured"
     fi
   fi
-  if have_cmd istioctl; then
+  if have_cmd istioctl && ! skip_excluded_cmd istioctl; then
     v=$(istioctl version --remote=false 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
     if [[ -n "$v" ]]; then
       judge_branched "istioctl (client)" host "$v" "$ISTIO_FIXED" 2 WARN WARN "check the control plane version too; affected only with Brotli decompression enabled"
@@ -978,11 +1222,12 @@ function check_proxies() {
   fi
   for p in /etc/envoy /etc/istio; do
     [[ -d "$p" ]] || continue
+    if is_excluded_target "$p"; then continue; fi
     if grep -rIqi 'brotli' "$p" 2>/dev/null; then
       emit WARN "proxy config [$p] mentions brotli, confirm Envoy >= 1.40.0 / 1.39.3 / 1.38.6 / 1.37.8 / 1.36.12 and Istio >= 1.31.2 / 1.30.6 / 1.29.9"
     fi
   done
-  if [[ -d /etc/nginx ]] && grep -rIqi brotli /etc/nginx 2>/dev/null; then
+  if [[ -d /etc/nginx ]] && ! is_excluded_target /etc/nginx && grep -rIqi brotli /etc/nginx 2>/dev/null; then
     emit INFO "nginx config [/etc/nginx] mentions brotli; ngx_brotli only compresses and is not affected"
   fi
   return 0
@@ -1063,6 +1308,7 @@ function check_containers() {
     [[ -n "$img" && "$img" != *"<none>"* ]] || continue
     if "$ENGINE" run --rm --network=none --pull=never --cap-drop=ALL --entrypoint sh "$img" -c "$probe" \
         > "$WORK/probe.out" 2>/dev/null < /dev/null; then
+      emit INFO "image:$img probed"
       apply_probe "$img" "$WORK/probe.out"
     else
       emit SKIP "image:$img has no shell or the probe failed, not inspected"
@@ -1074,7 +1320,7 @@ function check_containers() {
 # Fail early if a core utility the checks rely on is missing
 function require_tools() {
   local t
-  for t in find grep sed awk tr cut head ls mktemp rm uname dirname basename; do
+  for t in find grep sed awk tr cut head ls mktemp rm uname dirname basename od sort comm; do
     command -v "$t" >/dev/null 2>&1 || die "required utility not found: $t"
   done
 }
@@ -1169,6 +1415,15 @@ function parse_args() {
         if [[ -z "${1#--root=}" ]]; then echo "Option --root needs an argument" >&2; usage >&2; exit 2; fi
         ROOTS="${ROOTS}${1#--root=}"$'\n'
         shift ;;
+      -x|--exclude)
+        if [[ $# -lt 2 || -z "$2" ]]; then echo "Option $1 needs an argument" >&2; usage >&2; exit 2; fi
+        EXCLUDES="${EXCLUDES}$2"$'\n'
+        shift 2 ;;
+      --exclude=*)
+        if [[ -z "${1#--exclude=}" ]]; then echo "Option --exclude needs an argument" >&2; usage >&2; exit 2; fi
+        EXCLUDES="${EXCLUDES}${1#--exclude=}"$'\n'
+        shift ;;
+      -d|--deep) DEEP=1; shift ;;
       -c|--containers) DO_CONTAINERS=1; shift ;;
       -i|--image)
         if [[ $# -lt 2 || -z "$2" ]]; then echo "Option $1 needs an argument" >&2; usage >&2; exit 2; fi
@@ -1195,20 +1450,180 @@ function parse_args() {
   esac
 }
 
-# Default the scan roots to $HOME, then resolve each to a unique absolute path
+# Print the default scan roots: $HOME, the Homebrew prefix and, on macOS, /Applications
+function default_roots() {
+  local prefix=""
+  echo "$HOME"
+  if have_cmd brew && ! brew_excluded; then prefix=$(HOMEBREW_NO_AUTO_UPDATE=1 brew --prefix 2>/dev/null || true); fi
+  if [[ -n "$prefix" && -d "$prefix" ]]; then echo "$prefix"; fi
+  if [[ "$(uname -s)" == "Darwin" && -d /Applications ]]; then echo /Applications; fi
+  return 0
+}
+
+# Print a path made absolute against $PWD, with empty, "." and ".." components resolved lexically
+function normalize_path() {
+  local p="$1" out="" part
+  local -a parts=()
+  if [[ "$p" != /* ]]; then p="$PWD/$p"; fi
+  IFS=/ read -r -a parts <<< "$p"
+  for part in ${parts[@]+"${parts[@]}"}; do
+    case "$part" in
+      ""|.) ;;
+      ..) out=${out%/*} ;;
+      *) out="$out/$part" ;;
+    esac
+  done
+  printf '%s\n' "${out:-/}"
+}
+
+# Print the physical path of a directory (cd -P in a subshell), or fail if it cannot be entered
+function phys_dir() {
+  (CDPATH='' cd -P -- "$1" 2>/dev/null && pwd -P)
+}
+
+# Print the physical absolute path of a file or directory, following symlinks in every component
+function phys_path() {
+  local p dir n=0 link
+  p=$(normalize_path "$1")
+  while [[ -L "$p" && "$n" -lt 40 ]] && link=$(readlink "$p" 2>/dev/null); do
+    case "$link" in
+      /*) p=$(normalize_path "$link") ;;
+      *) p=$(normalize_path "${p%/*}/$link") ;;
+    esac
+    n=$((n + 1))
+  done
+  if [[ -d "$p" ]] && dir=$(phys_dir "$p"); then
+    printf '%s\n' "$dir"
+    return 0
+  fi
+  dir=${p%/*}
+  if dir=$(phys_dir "${dir:-/}"); then
+    printf '%s/%s\n' "${dir%/}" "${p##*/}"
+  else
+    printf '%s\n' "$p"
+  fi
+}
+
+# Resolve each --exclude to its lexical absolute path, the path with its parent resolved, and, for a
+# directory, its physical path, so a symlinked exclude also covers its target
+function resolve_excludes() {
+  local ex lex parent viaparent phys resolved="" p
+  while IFS= read -r ex; do
+    [[ -n "$ex" ]] || continue
+    lex=$(normalize_path "$ex")
+    [[ "$lex" != / ]] || die "exclude resolves to /, which would skip everything: $ex"
+    viaparent=""
+    parent=${lex%/*}
+    if parent=$(phys_dir "${parent:-/}"); then viaparent="${parent%/}/${lex##*/}"; fi
+    phys=""
+    if [[ -d "$lex" ]] && phys=$(phys_dir "$lex"); then
+      [[ "$phys" != / ]] || die "exclude resolves to /, which would skip everything: $ex"
+    fi
+    for p in "$lex" "$viaparent" "$phys"; do
+      [[ -n "$p" ]] || continue
+      case $'\n'"$resolved" in *$'\n'"$p"$'\n'*) continue ;; esac
+      resolved="${resolved}${p}"$'\n'
+    done
+  done <<< "$EXCLUDES"
+  EXCLUDES="$resolved"
+}
+
+# True if a path is an excluded directory or inside one (case-insensitive on macOS)
+function is_excluded() {
+  local path="$1" ex
+  if [[ "$(uname -s)" == "Darwin" ]]; then path=$(printf '%s\n' "$path" | tr '[:upper:]' '[:lower:]'); fi
+  while IFS= read -r ex; do
+    [[ -n "$ex" ]] || continue
+    if [[ "$(uname -s)" == "Darwin" ]]; then ex=$(printf '%s\n' "$ex" | tr '[:upper:]' '[:lower:]'); fi
+    if [[ "$path" == "$ex" || "$path" == "$ex"/* ]]; then return 0; fi
+  done <<< "$EXCLUDES"
+  return 1
+}
+
+# True if a path, lexically or after following its symlinks, is an excluded directory or inside one
+function is_excluded_target() {
+  [[ -n "$EXCLUDES" && -n "$1" ]] || return 1
+  if is_excluded "$(normalize_path "$1")"; then return 0; fi
+  is_excluded "$(phys_path "$1")"
+}
+
+# True, after emitting a SKIP line, if a host command's binary lies inside an excluded directory
+function skip_excluded_cmd() {
+  local p
+  p=$(command -v "$1" 2>/dev/null) || return 1
+  is_excluded_target "$p" || return 1
+  emit SKIP "$1 [host] $p is inside an excluded directory, not checked"
+}
+
+# True if brew, its prefix or its Cellar lies inside an excluded directory; caches the path in BREW_EXCLUDED
+function brew_excluded() {
+  local p
+  if [[ -z "$BREW_EXCLUDED" ]]; then
+    BREW_EXCLUDED=no
+    p=$(command -v brew 2>/dev/null || true)
+    if is_excluded_target "$p"; then
+      BREW_EXCLUDED="$p"
+    elif [[ -n "$EXCLUDES" ]]; then
+      for p in "$(HOMEBREW_NO_AUTO_UPDATE=1 brew --prefix 2>/dev/null || true)" \
+          "$(HOMEBREW_NO_AUTO_UPDATE=1 brew --cellar 2>/dev/null || true)"; do
+        if is_excluded_target "$p"; then BREW_EXCLUDED="$p"; break; fi
+      done
+    fi
+  fi
+  [[ "$BREW_EXCLUDED" != "no" ]]
+}
+
+# Print a path's device number (GNU or busybox stat, then BSD stat), or nothing
+function dev_of() {
+  stat -c %d "$1" 2>/dev/null || stat -f %d "$1" 2>/dev/null || true
+}
+
+# True if a walk from the outer root reaches the nested root: same device and no built-in prune on the way
+function walk_reaches() {
+  local outer="$1" p="$2" pat
+  while [[ -n "$p" && "$p" != "$outer" ]]; do
+    while IFS= read -r pat; do
+      # shellcheck disable=SC2053 # the pattern is a glob on purpose
+      if [[ -n "$pat" && "$p" == $pat ]]; then return 1; fi
+    done <<< "$BUILTIN_PRUNE"
+    p=${p%/*}
+  done
+  [[ "$(dev_of "$2")" == "$(dev_of "$outer")" ]]
+}
+
+# True if a root lies inside another root in the list whose walk already covers it
+function root_covered() {
+  local root="$1" other
+  while IFS= read -r other; do
+    [[ -n "$other" && "$other" != "$root" ]] || continue
+    if [[ "$other" == / || "$root" == "$other"/* ]] && walk_reaches "$other" "$root"; then return 0; fi
+  done <<< "$2"
+  return 1
+}
+
+# Default the scan roots, then resolve each to a unique absolute path outside the excluded directories,
+# dropping any root another root's walk already covers
 function resolve_roots() {
-  local root resolved=""
+  local root resolved="" kept=""
+  resolve_excludes
   if [[ -z "$ROOTS" ]]; then
-    ROOTS="$HOME"$'\n'
+    ROOTS=$(default_roots)$'\n'
   fi
   while IFS= read -r root; do
     [[ -n "$root" ]] || continue
     [[ -d "$root" ]] || die "scan root is not a directory: $root"
-    root=$(cd "$root" && pwd -P)
+    root=$(phys_dir "$root") || die "scan root cannot be entered: $root"
+    if is_excluded "$root"; then continue; fi
     case $'\n'"$resolved" in *$'\n'"$root"$'\n'*) continue ;; esac
     resolved="${resolved}${root}"$'\n'
   done <<< "$ROOTS"
-  ROOTS="$resolved"
+  [[ -n "$resolved" ]] || die "every scan root is excluded"
+  while IFS= read -r root; do
+    [[ -n "$root" ]] || continue
+    if root_covered "$root" "$resolved"; then continue; fi
+    kept="${kept}${root}"$'\n'
+  done <<< "$resolved"
+  ROOTS="$kept"
 }
 
 # Create the temp work directory and set the environment the checks run in
@@ -1222,10 +1637,11 @@ function prepare_run() {
 
 # Run every host, package and container check in order
 function run_checks() {
-  emit INFO "CVE-2026-111497 (Brotli) check; scan roots: $(printf '%s' "$ROOTS" | tr '\n' ' ')containers=$DO_CONTAINERS"
+  emit INFO "CVE-2026-111497 (Brotli) check; scan roots: $(printf '%s' "$ROOTS" | tr '\n' ' ')excluded: $(printf '%s' "$EXCLUDES" | tr '\n' ' ')containers=$DO_CONTAINERS deep=$DEEP"
   if [[ "$DO_CONTAINERS" -eq 1 ]]; then
     run_check 18 preflight_containers
   fi
+  build_prune
   build_index
 
   run_check 01 check_os_packages
@@ -1245,6 +1661,11 @@ function run_checks() {
   run_check 15 scan_bundled_libbrotli
   run_check 16 check_curl_brotli
   run_check 17 check_proxies
+  run_check 19 scan_bundled_node
+  run_check 20 scan_electron
+  if [[ "$DEEP" -eq 1 ]]; then
+    run_check 21 scan_app_binaries
+  fi
   if [[ "$DO_CONTAINERS" -eq 1 && -n "$ENGINE" ]]; then
     run_check 18 check_containers
   fi
